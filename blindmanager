@@ -5,7 +5,7 @@ import time
 import json
 import threading
 import queue
-
+import sys
 
 HOST = None
 
@@ -81,6 +81,7 @@ class Blind:
         self.channel = int(config.get("channel", 1))
         self.device_class = config.get("device_class", "shade")
         self.topic = config["topic"]
+        self.commands = {UP: config["up"], DOWN: config["down"], STOP: config["stop"]}
 
     def run(self, manager):
         self.manager = manager
@@ -115,10 +116,18 @@ class Blind:
                     sendstop = True
                 else:
                     percentage = int(command)
-                    if percentage == 100 or percentage > self.position:
+                    if percentage == 51:
+                        self.sendcommand(DOWN)
+                        self.action = DOWN
+                        self.target_position = 0
+                    elif percentage == 100 or percentage > self.position:
                         self.sendcommand(UP)
                         self.action = UP
-                    elif percentage == 0 or percentage < self.position:
+                    elif percentage == 0:
+                        self.sendcommand(STOP)
+                        self.action = DOWN
+                        print(f"close using stop.  Target position {self.target_position}")
+                    elif percentage < self.position:
                         self.sendcommand(DOWN)
                         self.action = DOWN
                     else:
@@ -182,9 +191,8 @@ class Blind:
 
     def sendcommand(self, command):
         # Get the homie_id, and build the command to send
-        self.manager.publishhomie(
-            self.homie_id, f"{command.upper()},{hex(self.remote_id)},{self.channel}"
-        )
+        # self.manager.publishhomie(self.homie_id, f"{command.upper()},{hex(self.remote_id)},{self.channel}"
+        self.manager.publishhomie(self.homie_id, self.commands[command])
 
     def hassconfig(self):
         """Return a JSON dict of the configuration for this cover.
@@ -197,9 +205,8 @@ class Blind:
             "position_topic": f"blinds/{self.topic}/position",
             "set_position_topic": f"blinds/{self.topic}/position/set",
             "command_topic": f"blinds/{self.topic}/command/set",
-            "availability_topic": f"homie/{self.homie_id}/$online",
-            "payload_available": "true",
-            "payload_not_available": "false",
+            "availability_topic": f"homie/{self.homie_id}/$state",
+            "payload_available": "ready",
             "unique_id": f"blinds_{self.topic}",
             "device": {"identifiers": [self.homie_id]},
             "json_attributes_topic": f"blinds/homie/{self.homie_id}/state",
@@ -251,9 +258,8 @@ class BlindManager:
                     {
                         "name": f"Blind controller status ({homie_id})",
                         "state_topic": f"homie/{homie_id}/$stats/signal",
-                        "availability_topic": f"homie/{homie_id}/$online",
-                        "payload_available": "true",
-                        "payload_not_available": "false",
+                        "availability_topic": f"homie/{homie_id}/$state",
+                        "payload_available": "ready",
                         "json_attributes_topic": f"blinds/homie/{homie_id}/state",
                         "unit_of_measurement": "%",
                         "icon": "mdi:information-outline",
@@ -261,6 +267,8 @@ class BlindManager:
                         "device": {
                             "identifiers": [homie_id],
                             "name": f"Blinds Controller ({homie_id})",
+                            "manufacturer": "bgdev, Inc.",
+                            "model": "Python Docker, Wemos 433 Mhz"
                         },
                     }
                 ),
@@ -297,7 +305,6 @@ class BlindManager:
                 if time.time() > self.next_state_publish:
                     self.publishhomiestate()
                     self.next_state_publish = time.time() + STATE_PUBLISH_FREQUENCY
-
             except Exception as e:
                 logerror(f"Error in publishing loop: {e}")
                 time.sleep(5)
@@ -338,6 +345,7 @@ class BlindManager:
                     # It's a type of state field, see if we want it and update the status
                     keystr = "/".join(parts[2:])
                     if keystr in HOMIE_STATE_KEYS and parts[1] in self.homie_state:
+                        # print(f"adding stuff to homie_state[{parts[1]}][{HOMIE_STATE_KEYS[keystr]}] : {payload}")
                         self.homie_state[parts[1]][HOMIE_STATE_KEYS[keystr]] = payload
 
             elif parts[0] == "blinds":
