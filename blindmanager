@@ -6,6 +6,7 @@ import json
 import threading
 import queue
 import sys
+from datetime import datetime
 
 HOST = None
 
@@ -126,7 +127,7 @@ class Blind:
                     elif percentage == 0:
                         self.sendcommand(STOP)
                         self.action = DOWN
-                        print(f"close using stop.  Target position {self.target_position}")
+                        print(f"{datetime.now()} {self.name} close using stop.  Target position {self.target_position}")
                     elif percentage < self.position:
                         self.sendcommand(DOWN)
                         self.action = DOWN
@@ -193,6 +194,7 @@ class Blind:
         # Get the homie_id, and build the command to send
         # self.manager.publishhomie(self.homie_id, f"{command.upper()},{hex(self.remote_id)},{self.channel}"
         self.manager.publishhomie(self.homie_id, self.commands[command])
+        print(f"{datetime.now()} {self.name} {self.homie_id} CMD: {self.commands[command]}")
 
     def hassconfig(self):
         """Return a JSON dict of the configuration for this cover.
