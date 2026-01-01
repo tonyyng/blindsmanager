@@ -262,6 +262,7 @@ class BlindManager:
                         "state_topic": f"homie/{homie_id}/$stats/signal",
                         "availability_topic": f"homie/{homie_id}/$state",
                         "payload_available": "ready",
+                        "optimistic": "true",
                         "json_attributes_topic": f"blinds/homie/{homie_id}/state",
                         "unit_of_measurement": "%",
                         "icon": "mdi:information-outline",
@@ -295,7 +296,7 @@ class BlindManager:
                     else:
                         pubtype = None
                 if pubtype == "blinds":
-                    self.client.publish(f"blinds/{topic}/position", payload)
+                    self.client.publish(f"blinds/{topic}/position", payload, retain=True)
                 elif pubtype == "homie":
                     if (time.time() - lasthomiesend) < HOMIE_SEND_DELAY:
                         print("Sending homie too fast, delaying...", homiedelayed)
@@ -351,7 +352,25 @@ class BlindManager:
                         self.homie_state[parts[1]][HOMIE_STATE_KEYS[keystr]] = payload
 
             elif parts[0] == "blinds":
-                if parts[-1] == "set":
+                topic = parts[1]
+                if topic not in self.blindsbytopic:
+                    return
+                blind = self.blindsbytopic[topic]
+
+                # Handle the retained position message
+                if parts[-1] == "position" and not msg.topic.endswith("/set"):
+                    # This is the broker sending us the last known position
+                    try:
+                        saved_position = int(payload)
+                        # Only update if the blind isn't already moving
+                        if blind.action == STOP:
+                            blind.position = saved_position
+                            print(f"Restored {blind.name} to saved position: {saved_position}")
+                    except ValueError:
+                        pass 
+
+                # Existing logic for 'set' commands...
+                elif parts[-1] == "set":            
                     topic = parts[1]
                     if topic not in self.blindsbytopic:
                         return
@@ -375,6 +394,7 @@ class BlindManager:
             logerror(
                 f"Error with topic: {msg.topic}, payload: {msg.payload}: {e} ({e!r})"
             )
+
 
     def publishhomie(self, homie_id, payload):
         self.publishqueue.put(("homie", homie_id, payload))

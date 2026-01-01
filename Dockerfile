@@ -1,7 +1,8 @@
-FROM python
+#FROM python
+FROM francoisgervais/opencv-python:latest
 
-RUN pip install --upgrade pip && \
-    pip install paho-mqtt
+RUN pip3 install --upgrade pip && \
+    pip3 install paho-mqtt
 
 WORKDIR /app/
 COPY blindmanager /app/
